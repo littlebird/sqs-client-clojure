@@ -57,15 +57,20 @@
        (.getQueueUrls)
        (->> (into [])))))
 
+(defn get-group
+  []
+  "jobqueue")
+
 (defn send-message
   ([queue-name msg] (send-message queue-name msg {}))
   ([queue-name msg opts]
-   (let [{:keys [id wait-time]
+   (let [{:keys [id wait-time group]
           :or {id (hash msg)
-               wait-time 0}} opts]
+               wait-time 0
+               group (get-group)}} opts]
      (-> (SendMessageRequest.)
          (.withQueueUrl (queue-url queue-name))
-         (.withMessageGroupId "sprinklrnewjobqueue")
+         (.withMessageGroupId group)
          (.withMessageDeduplicationId (str id))
          (.withMessageBody msg)
          (.withDelaySeconds (int wait-time))
