@@ -19,7 +19,7 @@
       (name)
       (string/upper-case)
       (string/replace #"-" "_")
-      (->> (str "Regions/"))
+      (->> (str "com.amazonaws.regions.Regions/"))
       (symbol)))
 
 (defmacro get-sqs
