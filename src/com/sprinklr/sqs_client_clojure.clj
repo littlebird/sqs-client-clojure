@@ -1,8 +1,11 @@
 (ns com.sprinklr.sqs-client-clojure
-  (:import (com.amazonaws.services.sqs AmazonSQS
+  (:require [clojure.string :as string])
+  (:import (com.amazonaws.regions Regions)
+           (com.amazonaws.services.sqs AmazonSQS
                                        AmazonSQSClientBuilder)
            (com.amazonaws.services.sqs.model AmazonSQSException
                                              CreateQueueRequest
+                                             DeleteMessageRequest
                                              ListQueuesRequest
                                              Message
                                              SendMessageRequest
@@ -10,10 +13,23 @@
                                              SendMessageBatchRequestEntry
                                              ReceiveMessageRequest)))
 
-(def sqs (AmazonSQSClientBuilder/defaultClient))
+(defn make-region-symbol
+  [region]
+  (-> region
+      (name)
+      (string/upper-case)
+      (string/replace #"-" "_")
+      (->> (str "Regions/"))
+      (symbol)))
+
+(defmacro get-sqs
+  [region]
+    `(-> (AmazonSQSClientBuilder/standard)
+         (.withRegion ~(make-region-symbol region))
+         (.build)))
 
 (defn queue-url
-  [queue-name]
+  [sqs queue-name]
   (some->> queue-name
            (.getQueueUrl sqs)
            (.getQueueUrl)))
@@ -23,8 +39,8 @@
   `(.addAttributesEntry ~obj ~(name k) (str ~v)))
 
 (defn create-queue
-  ([queue-name] (create-queue queue-name {}))
-  ([queue-name opts]
+  ([sqs queue-name] (create-queue sqs queue-name {}))
+  ([sqs queue-name opts]
    (let [{:keys [delay-seconds retention-period fifo?]
           :or {delay-seconds 60
                retention-period 86400
@@ -40,18 +56,18 @@
               (throw e)))))))
 
 (defn delete-queue
-  [q-name]
-  (some-> q-name
-          (queue-url)
-          (.deleteQueue sqs)))
+  [sqs q-name]
+  (some->> q-name
+           (queue-url sqs)
+           (.deleteQueue sqs)))
 
 (defn list-queues
-  ([]
+  ([sqs]
    (-> sqs
        (.listQueues)
        (.getQueueUrls)
        (->> (into []))))
-  ([prefix]
+  ([sqs prefix]
    (-> sqs
        (.listQueues (ListQueuesRequest. prefix))
        (.getQueueUrls)
@@ -62,26 +78,40 @@
   "jobqueue")
 
 (defn send-message
-  ([queue-name msg] (send-message queue-name msg {}))
-  ([queue-name msg opts]
+  ([sqs queue-name msg] (send-message sqs queue-name msg {}))
+  ([sqs queue-name msg opts]
    (let [{:keys [id wait-time group]
           :or {id (hash msg)
                wait-time 0
                group (get-group)}} opts]
      (-> (SendMessageRequest.)
-         (.withQueueUrl (queue-url queue-name))
+         (.withQueueUrl (queue-url sqs queue-name))
          (.withMessageGroupId group)
          (.withMessageDeduplicationId (str id))
          (.withMessageBody msg)
          (.withDelaySeconds (int wait-time))
          (->> (.sendMessage sqs))))))
 
+(defn delete-message
+  [sqs queue-name handle]
+  (try
+   (let [queue (queue-url sqs queue-name)
+         delete-rq (-> (DeleteMessageRequest.)
+                       (.withQueueUrl queue)
+                       (.withReceiptHandle handle))]
+     (.deleteMessage sqs delete-rq))
+   (catch Exception e
+     (pr-str e))))
+
 (defn receive-message
-  [queue-name]
-  (-> (ReceiveMessageRequest. (queue-url queue-name))
-      (.withMaxNumberOfMessages (int 1))
-      (.withWaitTimeSeconds (int 20))
-      (->> (.receiveMessage sqs))
-      (some-> (.getMessages)
-              (first)
-              (.getBody))))
+  [sqs queue-name]
+  (let [rq-req (-> (ReceiveMessageRequest. (queue-url sqs queue-name))
+                   (.withMaxNumberOfMessages (int 1))
+                   (.withWaitTimeSeconds (int 20)))
+        msg (some-> (.receiveMessage sqs rq-req)
+                    (.getMessages)
+                    (first))]
+    (when msg
+      (delete-message sqs queue-name (.getReceiptHandle msg)))
+    (some-> msg
+            (.getBody))))
