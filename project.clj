@@ -1,4 +1,4 @@
-(defproject com.sprinklr/sqs-client-clojure "0.1.0-SNAPSHOT"
+(defproject com.sprinklr/sqs-client-clojure "0.1.0"
   :description "convenience function for using SQS from clojure"
   :url "https://github.com/Sprinklr/sqs-client-clojure"
   :license {:name "Eclipse Public License"
