@@ -42,7 +42,7 @@
   ([sqs queue-name] (create-queue sqs queue-name {}))
   ([sqs queue-name opts]
    (let [{:keys [delay-seconds retention-period fifo?]
-          :or {delay-seconds 60
+          :or {delay-seconds 0
                retention-period 86400
                fifo? true}} opts
          create-request (-> (CreateQueueRequest. queue-name)
