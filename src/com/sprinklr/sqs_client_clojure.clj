@@ -1,6 +1,9 @@
 (ns com.sprinklr.sqs-client-clojure
-  (:require [clojure.string :as string])
-  (:import (com.amazonaws.regions Regions)
+  (:require [clojure.string :as string]
+            [cognitect.transit :as transit])
+  (:import (java.io ByteArrayOutputStream
+                    ByteArrayInputStream)
+           (com.amazonaws.regions Regions)
            (com.amazonaws.services.sqs AmazonSQS
                                        AmazonSQSClientBuilder)
            (com.amazonaws.services.sqs.model AmazonSQSException
@@ -115,3 +118,17 @@
       (delete-message sqs queue-name (.getReceiptHandle msg)))
     (some-> msg
             (.getBody))))
+
+(defn transit-string
+  [data encoders]
+  (let [baos (ByteArrayOutputStream. 512)
+        writer (transit/writer baos :json encoders)
+        _ (transit/write writer data)
+        packed (.toByteArray baos)]
+    (String. packed)))
+
+(defn string-transit
+  [string decoders]
+  (let [bytes-in (ByteArrayInputStream. (.getBytes string))
+        reader (transit/reader bytes-in :json decoders)]
+    (transit/read reader)))
